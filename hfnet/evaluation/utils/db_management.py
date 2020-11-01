@@ -122,13 +122,17 @@ def read_query_list(path, prefix=''):
             elif model == 'PINHOLE':
                 fx, fy, px, py = params
                 dist = 0.0
+            elif model == 'RADIAL':
+                f, px, py, dist = params
+                fx = fy = f
             else:
                 raise(ValueError, f'Unknown camera model: {model}')
             K = np.array([[float(fx), 0, float(px)-0.5],
                           [0, float(fy), float(py)-0.5],
                           [0, 0, 1]])
             name = str(Path(prefix, name))
-            query = QueryInfo(name, model, int(w), int(h), K, float(dist))
+
+            query = QueryInfo(name, model, int(float(w)), int(float(h)), K, float(dist))
             queries.append(query)
     return queries
 

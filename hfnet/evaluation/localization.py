@@ -4,6 +4,7 @@ from pathlib import Path
 import pickle
 import sys
 from tqdm import tqdm
+import os
 
 from hfnet.datasets import get_dataset
 from .utils import db_management
@@ -80,6 +81,7 @@ class Localization:
             globaldb_names, global_descriptors = pickle.load(f)
             assert isinstance(globaldb_names[0], str)
             name_to_id = {name: i for i, name in enumerate(globaldb_names)}
+
             mapping = np.array([name_to_id[n] for n in self.db_names])
             global_descriptors = global_descriptors[mapping]
         with open(local_path, 'rb') as f:
@@ -182,7 +184,10 @@ class Localization:
                     'matching': matches_data,
                     'matches': matches,
                     'inliers': inliers,
+                    'matched_kpts': matched_kpts[inliers],
+                    'matched_lms': matched_lms[inliers]
                 })
+
             if result.success:
                 break
 
@@ -195,7 +200,7 @@ class Localization:
         if debug:
             debug_data = {
                 **(dump[-1 if result.success else 0]),
-                'index_success': (len(dump)-1) if result.success else -1,
+                'index_success': (len(dump) - 1) if result.success else -1,
                 'dumps': dump,
                 'results': results,
                 'timings': timings
@@ -206,13 +211,24 @@ class Localization:
 
 
 def evaluate(loc, queries, query_dataset, max_iter=None):
+    write_matches = False
+    matches_path = Path(loc.base_path, "2d_3d_matches")
+    os.makedirs(matches_path, exist_ok=True)
     results = []
     all_stats = []
     query_iter = query_dataset.get_test_set()
 
     for query_info, query_data in tqdm(zip(queries, query_iter),
                                        total=len(queries)):
-        result, stats = loc.localize(query_info, query_data, debug=False)
+        result, stats = loc.localize(query_info, query_data, debug=True)
+        query_name = query_info.name.split("/")[1]
+        f = open(Path(matches_path, query_name + ".hfnet.txt"), "w")
+        matches_kpts_to_txt = stats['matched_kpts']
+        matches_lms_to_txt = stats['matched_lms']
+        for kpt, lms in zip(matches_kpts_to_txt, matches_lms_to_txt):
+            f.write("{} {} ".format(*kpt))
+            f.write("{} {} {}\n".format(*lms))
+        f.close()
         results.append(result)
         all_stats.append(stats)
 
@@ -232,4 +248,5 @@ def evaluate(loc, queries, query_dataset, max_iter=None):
     }
     metrics = {k: v.tolist() for k, v in metrics.items()}
     metrics['all_stats'] = all_stats
+    f.close()
     return metrics, results
